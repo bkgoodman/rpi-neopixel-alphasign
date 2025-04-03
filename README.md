@@ -16,12 +16,7 @@ Run like:
 
 `./neosign -x 8 -y 32 -m 'Hello, World! This is a test!'`
 
-Before building, make sure you fetch the required submodules with `git submodule sync` I think?
-
-I suppose I should break this out into an individual project which just includes the
-following library as a subproject.
-
-Pipe option allows you to specify a named pipe (file). Subsequent writes to the named
+Pipe option allows you to specify a named pipe (`-p filename`). Subsequent writes to the named
 pipe with update the display with the given text.
 
 # Building
