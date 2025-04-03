@@ -27,7 +27,7 @@ pipe with update the display with the given text.
 # Building
 
 ```
-git submodule sync
+git submodule update --init --recursive
 cmake .
 make
 ```
