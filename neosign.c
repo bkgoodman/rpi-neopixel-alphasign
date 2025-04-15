@@ -1,7 +1,8 @@
 /*
- * newtest.c
+ * neosign.c
  *
  * Copyright (c) 2014 Jeremy Garff <jer @ jers.net>
+ * Copyright (c) 2025 Brad Goodman < brad @ bradgoodman.com >
  *
  * All rights reserved.
  *
@@ -246,6 +247,45 @@ ws2811_led_t dotcolors_rgbw[] =
 
 // Add stuff to last row??
 //font8x8_basic[128][8]
+//
+unsigned char font_firstpos[128];
+unsigned char font_lastpos[128];
+// Detect character spacing - build table
+void init_font() {
+        int ch;
+        for (ch=32;ch<128;ch++) {
+            int x;
+            unsigned int det=0;
+            for (x=0;x<8;x++) {
+                    int y;
+                    int yy=0;
+                    for (y=0;y<8;y++) {
+                            if (font8x8_basic[ch][y] & (1<<x)) {
+                          //                   printf("X");
+                                    yy |=  (1<<y);
+                            } else {
+                        //         printf(" ");
+                            }
+                    }
+
+                    if (yy == 0) {
+                            if (!det) {
+                                    font_firstpos[ch] = x;
+                            }
+                      //       printf("  <--- EMPTY (%d)",x);
+                    } else  {
+                            det=1;
+                            font_lastpos[ch] = x;
+                    }
+                    // printf("\n");
+            }
+            //printf ("Char %c %d First=%d Last=%d\n",ch,ch,font_firstpos[ch],font_lastpos[ch]);
+        }
+        
+       // Space character requires actual space
+       font_firstpos[32] = 0;
+       font_lastpos[32] = 4;
+}
 void matrix_bottom(void)
 {
     int i;
@@ -523,6 +563,7 @@ void parseargs(int argc, char **argv, ws2811_t *ws2811)
 
 int main(int argc, char *argv[])
 {
+        init_font();
     ws2811_return_t ret;
     int bytes_read;
     char new_message[1024];
