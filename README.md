@@ -19,6 +19,12 @@ Run like:
 Pipe option allows you to specify a named pipe (`-p filename`). Subsequent writes to the named
 pipe with update the display with the given text.
 
+It will normally scroll text on pixels, but can alternateley present text "line by line"
+with the `-f` ("flash") option.
+
+# Colors
+`./neosign  -y 64 -m $'\ecff00ffThis is a test of \ecffff00the emergency broadcasting \ec00ffffsystem' -S -f`
+
 # Building
 
 ```
@@ -26,3 +32,27 @@ git submodule update --init --recursive
 cmake .
 make
 ```
+
+# Test and Debug
+
+The `-S` flag will write output to (ANSI) screen, and requires no pixels, as follows.
+
+```
+0         1         2         3         4         5         6
+-123456789-123456789-123456789-123456789-123456789-123456789-123
+
+
+ ████  ██  ██   ████  ██ ███   ███ ██  ████  █████   ████  ██  █
+██  ██ ███████ ██  ██  ███ ██ ██  ██  ██  ██ ██  ██ ██  ██ ██  █
+██████ ███████ ██████  ██  ██ ██  ██  ██████ ██  ██ ██     ██  █
+██     ██ █ ██ ██      ██      █████  ██     ██  ██ ██  ██  ████
+ ████  ██   ██  ████  ████        ██   ████  ██  ██  ████      █
+                              █████                        █████
+
+```
+
+Note that sometimes very dim colors will show up as all black on some terminals.
+To work around this, you may want to specify an explicit color with the `-C` flag like:
+
+`./neosign  -y 64 -m "This is a test of the emergency broadcasting" -f -S -C 0xff00ff`
+

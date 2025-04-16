@@ -172,6 +172,8 @@ void matrix_to_screen(void)
 {
 	int x, y;
 	printf("\033[2J");
+    uint32_t lastc=0;
+    uint32_t last;
 	for (x = 0; x < height; x++) {
 		if (!(x % 10))
 			printf("%d", x / 10);
@@ -189,7 +191,14 @@ void matrix_to_screen(void)
 
 	for (x = 0; x < width; x++) {
 		for (y = 0; y < height; y++) {
-			if (matrix[xy2px(x, y)]) {
+            last = matrix[xy2px(x, y)];
+            if (last && (last != lastc)){
+                    printf ("\e[38;2;%d;%d;%dm",(last >> 16) & 0xff,(last >> 8) & 0xff,(last) & 0xff);
+                    //printf ("\e[38;2;%d;%d;%dm",(last >> 16) & 0xff,255,(last) & 0xff);
+                    //printf ("\e[38;2;%d;%d;%dm",255,255,255);
+                    lastc = last;
+            }
+			if (last) {
 				printf("\u2588");
 			} else {
 				printf(" ");
@@ -322,7 +331,11 @@ int get_word_space(char *word)
 	while (*word) {
 		// Less than 32 is a control sequence
 
-		if (*word == 32) {
+        if (*word == 27) {
+                if (word[1]=='c')
+                        word += 8; //skip color data - TODO buffer check!
+        }
+        else if (*word == 32) {
 			space += 4;
 		} else if (*word > 32) {
 			space += font_lastpos[*word] - font_firstpos[*word];
@@ -479,10 +492,21 @@ screen_p build_word_array(const char *input_string)
 	return head;
 }
 
+void print_encoded_string(char *c) {
+        for (;*c;c++) {
+                if (c>=32) {
+                        printf("%c",*c);
+                } else {
+                        printf("[%2.2x]",*c);
+                }
+        }
+}
 void print_word_array(screen_p a)
 {
 	do {
-		printf("String \"%s\" len %d\n", a->text, a->size);
+		printf("String \"");
+        print_encoded_string(a->text);
+        printf("\" len %d\n",  a->size);
 	}
 	while (a = a->next);
 }
@@ -509,7 +533,19 @@ int display_array_entry(screen_p a, int startpos)
 	char *ch;
 	unsigned int c;
 	for (ch = a->text; *ch; ch++) {
-		if (*ch == 32) {
+        if (*ch == 27) {
+                if (ch[1] == 'c') {
+                        char *endptr = &ch[7];
+                        //print_encoded_string(&ch[1]);
+                        fix_color = strtoul(&ch[2],&endptr,16);
+                        ch += 7;
+                        //printf("NewFixColor %x = Next: ",fix_color);
+                        //print_encoded_string(&ch[1]);
+                        //exit(0);
+
+                }
+                continue;
+        } else if (*ch == 32) {
 			x += SPACE_WIDTH;
 			continue;
 		}
@@ -905,6 +941,7 @@ int main(int argc, char *argv[])
 				sleep(1);
 				if (!flash->next) {
 					flash = flash_orig;
+				    sleep(1);
 				} else {
 					flash = flash->next;
 				}
@@ -949,7 +986,9 @@ int main(int argc, char *argv[])
 
 	if (!output_to_screen) {
 		ws2811_fini(&ledstring);
-	}
+	} else {
+            printf("\033[0m");
+    }
 
 	printf("\n");
 	return ret;
