@@ -81,8 +81,8 @@ int charpos = 0;
 int rendersize = 32;
 int hue_phase = 0;
 const int max_hue = 768;
-int output_to_screen=0;
-unsigned char flash_message=0;
+int output_to_screen = 0;
+unsigned char flash_message = 0;
 
 int clear_on_exit = 0;
 char *message = 0L;
@@ -155,47 +155,48 @@ void matrix_render(void)
 {
 	int x, y;
 
-    if (output_to_screen) {
-            matrix_to_screen();
-            return;
-    }
+	if (output_to_screen) {
+		matrix_to_screen();
+		return;
+	}
 	for (x = 0; x < width; x++) {
 		for (y = 0; y < height; y++) {
-                    ledstring.channel[0].leds[(y * width) + x] =
-                        matrix[y * width + x];
-            
+			ledstring.channel[0].leds[(y * width) + x] =
+			    matrix[y * width + x];
+
 		}
 	}
 }
 
-void matrix_to_screen(void) {
+void matrix_to_screen(void)
+{
 	int x, y;
-    printf("\033[2J");
-    for (x = 0; x < height; x++) {
-       if (!(x%10))
-       printf("%d",x/10);
-       else
-               printf(" ");
-    }
-    printf("\n");
-    for (x = 0; x < height; x++) {
-       if (x%10)
-       printf("%d",x%10);
-       else
-               printf("-");
-    }
-    printf("\n");
+	printf("\033[2J");
+	for (x = 0; x < height; x++) {
+		if (!(x % 10))
+			printf("%d", x / 10);
+		else
+			printf(" ");
+	}
+	printf("\n");
+	for (x = 0; x < height; x++) {
+		if (x % 10)
+			printf("%d", x % 10);
+		else
+			printf("-");
+	}
+	printf("\n");
 
-    for (x = 0; x < width; x++) {
-	   for (y = 0; y < height; y++) {
-                    if( matrix[xy2px(x,y)]) {
-                            printf("\u2588");
-                    } else {
-                            printf(" ");
-                    }
-            }
-            printf ("\n");
-    }
+	for (x = 0; x < width; x++) {
+		for (y = 0; y < height; y++) {
+			if (matrix[xy2px(x, y)]) {
+				printf("\u2588");
+			} else {
+				printf(" ");
+			}
+		}
+		printf("\n");
+	}
 }
 
 // Shift everything over one dot in x direction?
@@ -321,12 +322,11 @@ int get_word_space(char *word)
 	while (*word) {
 		// Less than 32 is a control sequence
 
-            if (*word == 32) {
-                    space += 4;
-            }
-            else if (*word > 32) {
+		if (*word == 32) {
+			space += 4;
+		} else if (*word > 32) {
 			space += font_lastpos[*word] - font_firstpos[*word];
-			space+=2;	// Space between characters
+			space += 2;	// Space between characters
 			word++;
 		}
 	}
@@ -488,47 +488,59 @@ void print_word_array(screen_p a)
 }
 
 // Write a SPECIFIC word-array entry to display buffer
-void display_array_entry(screen_p a)
+int display_array_entry(screen_p a, int startpos)
 {
-	int i=0;
-    int x;
-    int charpos;
+	int i = 0;
+	int x;
+	int charpos;
 	// Clear entire display
 	matrix_clear();
 
-    // FIX - If larger than length - deal with scrolling
-    // Start position
-    x = (height - a->size)/2;
+	// FIX - If larger than length - deal with scrolling
+	// Start position
+	if (startpos == 0) {
+		x = (height - a->size) / 2;
+		if (x < 0)
+			x = 0;
+	} else {
+		x = -startpos;
+	}
 
 	char *ch;
-    unsigned int c;
+	unsigned int c;
 	for (ch = a->text; *ch; ch++) {
-        if (*ch == 32) {
-                x += SPACE_WIDTH;
-                continue;
-        }
-        for (charpos = font_firstpos[*ch];charpos <= font_lastpos[*ch];charpos++) {
-        //for (charpos = 0;charpos<8;charpos++) {
-                for (i = 0; i < width; i++) {
-                    if ((font8x8_basic[*ch][i] >> (charpos)) & 1) {
-                        //c = 0x00002000;
-                        if (fix_color == 0)
-                            c = hb_to_rgb(hue_phase, brightness);
-                        else
-                            c = fix_color;
-                    } else {
-                        c = 0;
-                    }
-
-
-                    if (x < height) {
-                        matrix[xy2px(i,x)] = c;
-                    }
-                }
-                x++;
+		if (*ch == 32) {
+			x += SPACE_WIDTH;
+			continue;
 		}
-        x++;
+		for (charpos = font_firstpos[*ch]; charpos <= font_lastpos[*ch];
+		     charpos++) {
+			for (i = 0; i < width; i++) {
+				if ((font8x8_basic[*ch][i] >> (charpos)) & 1) {
+					if (fix_color == 0)
+						c = hb_to_rgb(hue_phase,
+							      brightness);
+					else
+						c = fix_color;
+				} else {
+					c = 0;
+				}
+
+				if ((x < height) && (x >= 0)) {
+					matrix[xy2px(i, x)] = c;
+				}
+			}
+			x++;
+			if (x >= height) {
+				return (startpos + 1);
+			}
+		}
+		x++;
+		if (x >= height) {
+			return (startpos + 1);
+		}
 	}
+	return (0);
 }
 
 void display_word_array(screen_p a)
@@ -656,8 +668,8 @@ void parseargs(int argc, char **argv, ws2811_t * ws2811)
 	while (1) {
 
 		index = 0;
-		c = getopt_long(argc, argv, "fSC:b:p:cd:g:his:vx:y:m:", longopts,
-				&index);
+		c = getopt_long(argc, argv, "fSC:b:p:cd:g:his:vx:y:m:",
+				longopts, &index);
 
 		if (c == -1)
 			break;
@@ -690,7 +702,7 @@ void parseargs(int argc, char **argv, ws2811_t * ws2811)
 			exit(-1);
 
 		case 'f':
-            flash_message=1;
+			flash_message = 1;
 			break;
 		case 'D':
 			break;
@@ -857,13 +869,13 @@ int main(int argc, char *argv[])
 	screen_p flash = flash_orig;
 	display_word_array(flash);
 
-    if (!output_to_screen) {
-            if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
-                fprintf(stderr, "ws2811_init failed: %s\n",
-                    ws2811_get_return_t_str(ret));
-                return ret;
-            }
-    }
+	if (!output_to_screen) {
+		if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
+			fprintf(stderr, "ws2811_init failed: %s\n",
+				ws2811_get_return_t_str(ret));
+			return ret;
+		}
+	}
 
 	if (pipename) {
 		if (mkfifo(pipename, 0666) == -1 && errno != EEXIST) {
@@ -877,29 +889,39 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	int fmr = 0;
 	while (running) {
 		//matrix_raise();
-        if (flash_message) {
-                display_array_entry(flash);
-                sleep(1);
-                if (!flash->next) {
-                    flash = flash_orig;
-                } else {
-                    flash = flash->next;
-                }
-        } else {
-                matrix_bkg_shift();	// Scroll one pixel
-                matrix_bottom();
-        }
-		matrix_render();	// Send to hw buffer
-
-        if (!output_to_screen) {
-		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
-			fprintf(stderr, "ws2811_render failed: %s\n",
-				ws2811_get_return_t_str(ret));
-			break;
+		if (flash_message) {
+			fmr = display_array_entry(flash, fmr);
+            matrix_render();	// Send to hw buffer
+            //printf("FMR=%d\n",fmr);
+			if (fmr==1) {
+				sleep(1);
+            }
+            else if (fmr) {
+				//usleep(1000000 / 1500);
+			} else {
+				sleep(1);
+				if (!flash->next) {
+					flash = flash_orig;
+				} else {
+					flash = flash->next;
+				}
+			}
+		} else {
+			matrix_bkg_shift();	// Scroll one pixel
+			matrix_bottom();
+            matrix_render();	// Send to hw buffer
 		}
-        }
+
+		if (!output_to_screen) {
+			if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+				fprintf(stderr, "ws2811_render failed: %s\n",
+					ws2811_get_return_t_str(ret));
+				break;
+			}
+		}
 
 		// 15 frames /sec
 		usleep(1000000 / 15);
@@ -925,9 +947,9 @@ int main(int argc, char *argv[])
 		ws2811_render(&ledstring);
 	}
 
-    if (!output_to_screen) {
-	    ws2811_fini(&ledstring);
-    }
+	if (!output_to_screen) {
+		ws2811_fini(&ledstring);
+	}
 
 	printf("\n");
 	return ret;
