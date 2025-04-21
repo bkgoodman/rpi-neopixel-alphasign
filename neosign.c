@@ -74,6 +74,7 @@ int height = HEIGHT;
 int led_count = LED_COUNT;
 int pipe_fd = -1;
 unsigned int fix_color = 0;
+unsigned int *colorbuf=0;
 
 int renderpos = 0;
 // BKG Overall image to render and scroll
@@ -88,6 +89,7 @@ int clear_on_exit = 0;
 char *message = 0L;
 char *pipename = 0L;
 
+int xy2px(int x, int y);
 uint32_t hb_to_rgb(int hue, int brightness)
 {
 	uint8_t r, g, b;
@@ -150,6 +152,8 @@ ws2811_led_t *matrix;
 
 static uint8_t running = 1;
 
+void print_color_array(uint32_t *color,int size,int offset);
+void matrix_to_screen(void);
 // Send matrix buffer to actual led buffer
 void matrix_render(void)
 {
@@ -172,6 +176,7 @@ void matrix_to_screen(void)
 {
 	int x, y;
 	printf("\033[2J");
+	printf("\033[999A");
     uint32_t lastc=0;
     uint32_t last;
 	for (x = 0; x < height; x++) {
@@ -206,6 +211,14 @@ void matrix_to_screen(void)
 		}
 		printf("\n");
 	}
+    if (colorbuf) {
+    for (y = 0; y < height; y++) {
+            if (colorbuf[y]) 
+                    printf("^");
+            else
+                    printf(" ");
+    }}
+    printf("\n");
 }
 
 // Shift everything over one dot in x direction?
@@ -351,6 +364,7 @@ struct screen_s;
 typedef struct screen_s *screen_p;
 struct screen_s {
 	char *text;
+    uint32_t *color;
 	int size;
 	screen_p next;
 };
@@ -360,22 +374,28 @@ void free_word_array(screen_p a)
 	screen_p next;
 	while (a) {
 		free(a->text);
+		free(a->color);
 		next = a->next;
 		free(a);
 	}
 }
 
 // Function to build the linked list of words that fit the screen width
-screen_p build_word_array(const char *input_string)
+screen_p build_word_array(const char *input_string, const uint32_t *color)
 {
 	if (input_string == NULL || *input_string == '\0') {
 		return NULL;
 	}
 
+    printf("INPUT STRING \"%s\"\nINPUT COLORS: ",input_string);
+    print_color_array(color,strlen(input_string),0);
+
 	screen_p head = NULL;
 	screen_p current_node = NULL;
 	char *current_line = NULL;
 	int current_line_width = 0;
+    uint32_t charpos;
+	uint32_t *current_color = NULL;
 
 	// Create a mutable copy of the input string for strtok
 	char *str_copy = strdup(input_string);
@@ -386,6 +406,7 @@ screen_p build_word_array(const char *input_string)
 
 	char *word = strtok(str_copy, " ");
 	while (word != NULL) {
+        charpos = word-str_copy;
 		int word_width = get_word_space(word);
 		int potential_width;
 
@@ -396,7 +417,7 @@ screen_p build_word_array(const char *input_string)
 			    current_line_width + SPACE_WIDTH + word_width;
 		}
 
-		if (potential_width <= height) {
+		if (potential_width <=height) {
 			// Word fits on the current line
 			if (current_line == NULL) {
 				current_line = strdup(word);
@@ -404,13 +425,20 @@ screen_p build_word_array(const char *input_string)
 					perror("strdup failed");
 					// Need to free previously allocated memory if this happens in a real scenario
 					free(str_copy);
+					free(current_color);
 					return head;
 				}
+				current_color = malloc(sizeof(uint32_t)*strlen(word));
+                memcpy(current_color,&color[charpos],strlen(word)*sizeof(uint32_t));
+                printf("First Line \"%s\": (p=%d len=%d)",word,charpos,strlen(word));
+                print_color_array(current_color,strlen(word),charpos);
 				current_line_width = word_width;
 			} else {
 				// Append space and then the word
 				size_t new_len = strlen(current_line) + 1 + strlen(word) + 1;	// +1 for space, +1 for null terminator
+                //printf("line realoc %p %s\n",current_line,current_line);
 				char *temp = realloc(current_line, new_len);
+                //printf("line realoc done\n");
 				if (temp == NULL) {
 					perror("realloc failed");
 					// Need to free previously allocated memory if this happens in a real scenario
@@ -419,9 +447,23 @@ screen_p build_word_array(const char *input_string)
 					return head;
 				}
 				current_line = temp;
+                printf("AMMEND \"%s\" + \"%s\"\n",current_line,word);
+                int orig_strlen = strlen(current_line);
 				strcat(current_line, " ");
 				strcat(current_line, word);
-				current_line_width += SPACE_WIDTH + word_width;
+                int new_strlen = strlen(current_line);
+                int add_width = SPACE_WIDTH + word_width;
+                //printf("REALLOC clw=%d ww=%d \"%s\" SIZE %ld\n",current_line_width,word_width,current_line,sizeof(uint32_t)*(current_line_width+add_width));
+                //current_color = realloc(current_color,sizeof(uint32_t)*(current_line_width+add_width));
+                //printf("Realloc deon\n");
+                //memset(&current_color[current_line_width],0,add_width);
+				current_color = realloc(current_color,sizeof(uint32_t)*new_strlen);
+                //current_color[charpos+orig_strlen+1]=0; //space
+                memcpy(current_color,&color[charpos],new_strlen*sizeof(uint32_t));
+                printf("Ammend Line \"%s\": ",current_line);
+                print_color_array(current_color,strlen(current_line),charpos);
+				current_line_width += add_width;
+
 			}
 		} else {
 			// Word doesn't fit, start a new line
@@ -440,6 +482,7 @@ screen_p build_word_array(const char *input_string)
 				}
 				new_node->text = current_line;
 				new_node->size = current_line_width;
+                new_node->color= current_color;
 				new_node->next = NULL;
 
 				if (head == NULL) {
@@ -461,6 +504,10 @@ screen_p build_word_array(const char *input_string)
 				free_word_array(head);
 				return NULL;
 			}
+			current_color = malloc(sizeof(uint32_t)*strlen(word));
+            memcpy(current_color,&color[charpos],strlen(word)*sizeof(uint32_t));
+            printf("New Line: (cp=%d) \"%s\" ",charpos,current_line);
+            print_color_array(current_color,strlen(word),charpos);
 			current_line_width = word_width;
 		}
 
@@ -474,11 +521,13 @@ screen_p build_word_array(const char *input_string)
 			perror("malloc failed");
 			free(str_copy);
 			free(current_line);
+			free(current_color);
 			free_word_array(head);
 			return NULL;
 		}
 		new_node->text = current_line;
 		new_node->size = current_line_width;
+		new_node->color = current_color;
 		new_node->next = NULL;
 
 		if (head == NULL) {
@@ -494,21 +543,60 @@ screen_p build_word_array(const char *input_string)
 
 void print_encoded_string(char *c) {
         for (;*c;c++) {
-                if (c>=32) {
+                if (*c>=32) {
                         printf("%c",*c);
                 } else {
                         printf("[%2.2x]",*c);
                 }
         }
 }
+void print_color_array(uint32_t *color,int size,int offset) {
+        int i;
+        printf("COLOR ARRAY (o=%d s=%d): ",offset,size);
+            for (i=0;i<size;i++) {
+                    if (color[i]) {
+                            printf("%d:[%6.6x] ",i+offset,color[i]);
+                    }
+            }
+        printf("\n");
+}
 void print_word_array(screen_p a)
 {
+    int i;
 	do {
 		printf("String \"");
         print_encoded_string(a->text);
-        printf("\" len %d\n",  a->size);
+        printf("\" len %d -- ",  a->size);
+        printf("\n");
+        print_color_array(a->color,a->size,0);
 	}
 	while (a = a->next);
+}
+
+// Split message string into color and message buffers
+void decodeMessageString(char *s) {
+        char *c;
+        char *m = malloc(strlen(s));
+        int l=0;
+        colorbuf = malloc(strlen(s)*sizeof(uint32_t));
+        colorbuf[0] = 0;
+        for (c=s;*c;c++) {
+                if ((*c == 27) && (c[1]=='c')){ 
+                    char end;
+                    end = c[8];
+                    c[8] = (char) 0;
+                    colorbuf[l] = strtoul(&c[2],0L,16);
+                    c[8]=end;
+                    c += 7;
+                }  else {
+                        m[l]=*c;
+                        l++;
+                        colorbuf[l] = 0;
+                }
+        }
+        m[l]=(char) 0;
+        message=m;
+		rendersize = (strlen(message) * 8) + 16;
 }
 
 // Write a SPECIFIC word-array entry to display buffer
@@ -533,6 +621,7 @@ int display_array_entry(screen_p a, int startpos)
 	char *ch;
 	unsigned int c;
 	for (ch = a->text; *ch; ch++) {
+            /*
         if (*ch == 27) {
                 if (ch[1] == 'c') {
                         char *endptr = &ch[7];
@@ -545,7 +634,11 @@ int display_array_entry(screen_p a, int startpos)
 
                 }
                 continue;
-        } else if (*ch == 32) {
+        } else 
+        */
+        if (*ch == 32) {
+
+        
 			x += SPACE_WIDTH;
 			continue;
 		}
@@ -582,23 +675,28 @@ int display_array_entry(screen_p a, int startpos)
 void display_word_array(screen_p a)
 {
 	do {
+			int offset = 0;
 		if (a->size > height) {
 			// If it's too big - we need to scroll!
 			printf("SCROLL String \"%s\" len %d\n", a->text,
 			       a->size);
 		} else {
 			// If it fits - we need to center it
-			int offset;
 			offset = (height - a->size) / 2;
 			printf("CENTER String \"%s\" len %d offset=%d\n",
 			       a->text, a->size, offset);
 		}
+        if (a->color)
+        print_color_array(a->color,strlen(a->text),offset);
+        printf("\n");
 	}
 	while (a = a->next);
 }
 
 // This draws only the LAST roll of scrolling text
 // (Because it's called after we've scrolled/shifted)
+// This assumes characters are 8 bits wide, with code to trim trailing space
+// Colorbuf has one entry per character
 void matrix_bottom(void)
 {
 	int i;
@@ -610,6 +708,10 @@ void matrix_bottom(void)
 			ch = message[charpos / 8];
 		}
 	}
+
+    if (colorbuf && colorbuf[charpos>>3] && colorbuf[charpos>>3] != fix_color) {
+            fix_color=colorbuf[charpos>>3];
+    }
 
 	for (i = 0; i < width; i++) {
 		if ((font8x8_basic[ch][7 - i] >> (charpos % width)) & 1) {
@@ -825,8 +927,8 @@ void parseargs(int argc, char **argv, ws2811_t * ws2811)
 
 		case 'm':
 			if (optarg) {
-				message = strdup(optarg);
-				rendersize = (strlen(message) * 8) + 16;
+                decodeMessageString(optarg);
+                rendersize = (strlen(message) * 8) + 16;
 			}
 			break;
 		case 'p':
@@ -894,16 +996,14 @@ int main(int argc, char *argv[])
 
 	init_font();
 
-	if (message) {
-		printf("Message: \"%s\"\n", message);
-	}
 	matrix = malloc(sizeof(ws2811_led_t) * width * height);
 
 	setup_handlers();
 
-	screen_p flash_orig = build_word_array(message);
+	screen_p flash_orig = build_word_array(message,colorbuf);
 	screen_p flash = flash_orig;
 	display_word_array(flash);
+    //exit(1); // REMOVE
 
 	if (!output_to_screen) {
 		if ((ret = ws2811_init(&ledstring)) != WS2811_SUCCESS) {
@@ -969,11 +1069,13 @@ int main(int argc, char *argv[])
 			if (bytes_read >= 1) {
 				if (message)
 					free(message);
+                if (colorbuf)
+                    free(colorbuf);
+                new_message[bytes_read]=(char) 0;
 				message = strndup(new_message, bytes_read);
 				matrix_clear();
 				renderpos = 0;
 				charpos = 0;
-				rendersize = (strlen(message) * 8) + 16;
 			}
 		}
 	}
