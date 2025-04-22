@@ -405,8 +405,10 @@ screen_p build_word_array(const char *input_string, const uint32_t *color)
 	}
 
 	char *word = strtok(str_copy, " ");
+    int line_charpos=0;
 	while (word != NULL) {
         charpos = word-str_copy;
+        printf("Charpos is %d Line charpos %d\n",charpos,line_charpos);
 		int word_width = get_word_space(word);
 		int potential_width;
 
@@ -459,9 +461,9 @@ screen_p build_word_array(const char *input_string, const uint32_t *color)
                 //memset(&current_color[current_line_width],0,add_width);
 				current_color = realloc(current_color,sizeof(uint32_t)*new_strlen);
                 //current_color[charpos+orig_strlen+1]=0; //space
-                memcpy(current_color,&color[charpos],new_strlen*sizeof(uint32_t));
-                printf("Ammend Line \"%s\": ",current_line);
-                print_color_array(current_color,strlen(current_line),charpos);
+                memcpy(current_color,&color[line_charpos],new_strlen*sizeof(uint32_t));
+                printf("Ammend Line (cp=%d) \"%s\": ",charpos,current_line);
+                print_color_array(current_color,strlen(current_line),0);
 				current_line_width += add_width;
 
 			}
@@ -480,6 +482,7 @@ screen_p build_word_array(const char *input_string, const uint32_t *color)
 					free_word_array(head);
 					return NULL;
 				}
+                line_charpos = charpos;
 				new_node->text = current_line;
 				new_node->size = current_line_width;
                 new_node->color= current_color;
@@ -620,7 +623,8 @@ int display_array_entry(screen_p a, int startpos)
 
 	char *ch;
 	unsigned int c;
-	for (ch = a->text; *ch; ch++) {
+    uint32_t *color;
+	for (color=a->color,ch = a->text; *ch; color++,ch++) {
             /*
         if (*ch == 27) {
                 if (ch[1] == 'c') {
@@ -636,6 +640,7 @@ int display_array_entry(screen_p a, int startpos)
                 continue;
         } else 
         */
+        if (*color) fix_color=*color;
         if (*ch == 32) {
 
         
@@ -684,10 +689,10 @@ void display_word_array(screen_p a)
 			// If it fits - we need to center it
 			offset = (height - a->size) / 2;
 			printf("CENTER String \"%s\" len %d offset=%d\n",
-			       a->text, a->size, offset);
+			       a->text, a->size, 0);
 		}
         if (a->color)
-        print_color_array(a->color,strlen(a->text),offset);
+        print_color_array(a->color,strlen(a->text),0);
         printf("\n");
 	}
 	while (a = a->next);
