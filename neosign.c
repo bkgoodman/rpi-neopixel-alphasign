@@ -1112,7 +1112,9 @@ int main(int argc, char *argv[])
 	if (clear_on_exit) {
 		matrix_clear();
 		matrix_render();
-		ws2811_render(&ledstring);
+        if (!output_to_screen) {
+		    ws2811_render(&ledstring);
+        }
 	}
 
 	if (!output_to_screen) {
